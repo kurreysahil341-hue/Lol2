@@ -37,8 +37,15 @@ jobs:
 
     - name: Build Android Debug APK
       run: |
+        mkdir temp-gradle
+        cd temp-gradle
+        gradle wrapper --gradle-version 8.10.2
+        cd ..
+        cp temp-gradle/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
+        cp temp-gradle/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
+        cp temp-gradle/gradlew android/gradlew
+        rm -rf temp-gradle
         cd android
-        curl -L -o gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.10.2/gradle/wrapper/gradle-wrapper.jar
         chmod +x gradlew
         ./gradlew assembleDebug
 
