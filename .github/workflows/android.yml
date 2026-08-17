@@ -19,6 +19,11 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    - name: Set up Gradle 8.10.2
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.10.2'
+
     - name: Set up Node.js 22
       uses: actions/setup-node@v4
       with:
@@ -37,21 +42,11 @@ jobs:
 
     - name: Build Android Debug APK
       run: |
-        mkdir temp-gradle
-        cd temp-gradle
-        gradle wrapper --gradle-version 8.10.2
-        cd ..
-        cp temp-gradle/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/gradle-wrapper.jar
-        cp temp-gradle/gradle/wrapper/gradle-wrapper.properties android/gradle/wrapper/gradle-wrapper.properties
-        cp temp-gradle/gradlew android/gradlew
-        rm -rf temp-gradle
         cd android
-        chmod +x gradlew
-        ./gradlew assembleDebug
+        gradle assembleDebug
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: jarvis-voice-assistant-debug-apk
         path: android/app/build/outputs/apk/debug/app-debug.apk
-        
