@@ -45,7 +45,7 @@ jobs:
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
-      run: |
+      run: |${{ secrets.Ai_Assistant_API_KEY }}
         python3 -c "
         import re
         import os
