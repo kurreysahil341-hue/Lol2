@@ -16,7 +16,7 @@ jobs:
     - name: Set up Java JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '21'
+        java-version: '17'
         distribution: 'temurin'
 
     - name: Set up Gradle 8.11.1
@@ -43,15 +43,16 @@ jobs:
 
     - name: Automatically Update Android SDK & Gradle Plugin Versions
       env:
+        AI_ASSISTANT_API_KEY: ${{ secrets.AI_ASSISTANT_API_KEY }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
-      run: |${{ secrets.Ai_Assistant_API_KEY }}
+      run: |
         python3 -c "
         import re
         import os
         
         # Bake API Key into src/config/api-config.ts if provided in GitHub Secrets
-        api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('VITE_GEMINI_API_KEY')
+        api_key = os.environ.get('AI_ASSISTANT_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('VITE_GEMINI_API_KEY')
         if api_key:
             config_path = 'src/config/api-config.ts'
             with open(config_path, 'r') as f:
