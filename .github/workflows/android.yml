@@ -29,9 +29,10 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '22'
+        cache: 'npm'
 
     - name: Install Dependencies
-      run: npm ci || npm install
+      run: npm install --legacy-peer-deps --no-audit --no-fund
 
     - name: Build Web Application
       run: npm run build
@@ -40,6 +41,26 @@ jobs:
       run: |
         npx cap add android || true
         npx cap sync android
+
+    - name: Automatically Update Android SDK & Gradle Plugin Versions
+      run: |
+        python3 -c "
+        import re
+        # Update build.gradle
+        with open('android/build.gradle', 'r') as f:
+            content = f.read()
+        content = re.sub(r'gradle:[0-9.]+', 'gradle:8.9.1', content)
+        with open('android/build.gradle', 'w') as f:
+            f.write(content)
+
+        # Update variables.gradle
+        with open('android/variables.gradle', 'r') as f:
+            content = f.read()
+        content = re.sub(r'compileSdkVersion = \d+', 'compileSdkVersion = 36', content)
+        content = re.sub(r'targetSdkVersion = \d+', 'targetSdkVersion = 36', content)
+        with open('android/variables.gradle', 'w') as f:
+            f.write(content)
+        "
 
     - name: Build Android Debug APK
       run: |
