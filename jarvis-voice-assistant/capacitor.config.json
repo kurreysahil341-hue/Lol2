@@ -1,0 +1,19 @@
+{
+  "appId": "com.jarvis.voiceassistant",
+  "appName": "Jarvis Voice Assistant",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#000814",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    }
+  }
+}
