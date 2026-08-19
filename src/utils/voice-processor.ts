@@ -119,13 +119,33 @@ export function parseVoiceCommand(text: string, contacts: Contact[]): CommandRes
   }
 
   // 2. FLASHLIGHT / TORCH CONTROL
-  if (t.includes("flashlight on") || t.includes("torch on") || t.includes("torch jalao") || t.includes("flashlight jalao") || t.includes("light on")) {
+  if (
+    t.includes("flashlight on") || 
+    t.includes("torch on") || 
+    t.includes("torch jalao") || 
+    t.includes("flashlight jalao") || 
+    t.includes("light on") ||
+    t.includes("टॉर्च जलाओ") ||
+    t.includes("लाइट ऑन") ||
+    t.includes("टॉर्च ऑन") ||
+    t.includes("लाइट जलाओ")
+  ) {
     return {
       action: "torch_on",
       speakText: "Initializing secondary power backup. Flashlight turned on, Sir."
     };
   }
-  if (t.includes("flashlight off") || t.includes("torch off") || t.includes("torch band") || t.includes("flashlight band") || t.includes("light off")) {
+  if (
+    t.includes("flashlight off") || 
+    t.includes("torch off") || 
+    t.includes("torch band") || 
+    t.includes("flashlight band") || 
+    t.includes("light off") ||
+    t.includes("टॉर्च बंद") ||
+    t.includes("लाइट बंद") ||
+    t.includes("टॉर्च ऑफ") ||
+    t.includes("लाइट ऑफ")
+  ) {
     return {
       action: "torch_off",
       speakText: "Power grid restored. Flashlight deactivated, Sir."
@@ -254,7 +274,11 @@ export function parseVoiceCommand(text: string, contacts: Contact[]): CommandRes
     t.includes("click photo") || 
     t.includes("take photo") || 
     t.includes("capture") || 
-    t.includes("selfie")
+    t.includes("selfie") ||
+    t.includes("कैमरा") ||
+    t.includes("फोटो") ||
+    t.includes("तस्वीर") ||
+    t.includes("खींचो")
   ) {
     return {
       action: "camera",
