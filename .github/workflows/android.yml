@@ -91,8 +91,8 @@ jobs:
         # Update variables.gradle
         with open('android/variables.gradle', 'r') as f:
             content = f.read()
-        content = re.sub(r'compileSdkVersion = \d+', 'compileSdkVersion = 34', content)
-        content = re.sub(r'targetSdkVersion = \d+', 'targetSdkVersion = 34', content)
+        content = re.sub(r'compileSdkVersion = \d+', 'compileSdkVersion = 36', content)
+        content = re.sub(r'targetSdkVersion = \d+', 'targetSdkVersion = 36', content)
         with open('android/variables.gradle', 'w') as f:
             f.write(content)
 
