@@ -38,21 +38,48 @@ jobs:
         AI_ASSISTANT_API_KEY: ${{ secrets.AI_ASSISTANT_API_KEY }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+        YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        CALLING_API_KEY: ${{ secrets.CALLING_API_KEY }}
+        CAMERA_API_KEY: ${{ secrets.CAMERA_API_KEY }}
       run: |
         python3 -c "
         import re
         import os
         
-        # Bake API Key into src/config/api-config.ts if provided in GitHub Secrets
-        api_key = os.environ.get('AI_ASSISTANT_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('VITE_GEMINI_API_KEY')
-        if api_key:
-            config_path = 'src/config/api-config.ts'
+        # Bake API Keys into src/config/api-config.ts if provided in GitHub Secrets
+        config_path = 'src/config/api-config.ts'
+        if os.path.exists(config_path):
             with open(config_path, 'r') as f:
                 content = f.read()
-            content = content.replace('YOUR_GEMINI_API_KEY_HERE', api_key)
+            
+            gemini_key = os.environ.get('AI_ASSISTANT_API_KEY') or os.environ.get('GEMINI_API_KEY') or os.environ.get('VITE_GEMINI_API_KEY')
+            if gemini_key:
+                content = content.replace('YOUR_GEMINI_API_KEY_HERE', gemini_key)
+                print('Successfully baked Gemini API Key into api-config.ts!')
+            
+            youtube_key = os.environ.get('YOUTUBE_API_KEY')
+            if youtube_key:
+                content = content.replace('YOUR_YOUTUBE_API_KEY_HERE', youtube_key)
+                print('Successfully baked YouTube API Key into api-config.ts!')
+                
+            maps_key = os.environ.get('GOOGLE_MAPS_API_KEY')
+            if maps_key:
+                content = content.replace('YOUR_GOOGLE_MAPS_API_KEY_HERE', maps_key)
+                print('Successfully baked Google Maps API Key into api-config.ts!')
+                
+            calling_key = os.environ.get('CALLING_API_KEY')
+            if calling_key:
+                content = content.replace('YOUR_CALLING_API_KEY_HERE', calling_key)
+                print('Successfully baked Calling API Key into api-config.ts!')
+                
+            camera_key = os.environ.get('CAMERA_API_KEY')
+            if camera_key:
+                content = content.replace('YOUR_CAMERA_API_KEY_HERE', camera_key)
+                print('Successfully baked Camera API Key into api-config.ts!')
+                
             with open(config_path, 'w') as f:
                 f.write(content)
-            print('Successfully baked API Key into api-config.ts!')
 
         # Update build.gradle
         with open('android/build.gradle', 'r') as f:
@@ -64,8 +91,8 @@ jobs:
         # Update variables.gradle
         with open('android/variables.gradle', 'r') as f:
             content = f.read()
-        content = re.sub(r'compileSdkVersion = \d+', 'compileSdkVersion = 36', content)
-        content = re.sub(r'targetSdkVersion = \d+', 'targetSdkVersion = 36', content)
+        content = re.sub(r'compileSdkVersion = \d+', 'compileSdkVersion = 34', content)
+        content = re.sub(r'targetSdkVersion = \d+', 'targetSdkVersion = 34', content)
         with open('android/variables.gradle', 'w') as f:
             f.write(content)
 
@@ -73,9 +100,19 @@ jobs:
         manifest_path = 'android/app/src/main/AndroidManifest.xml'
         with open(manifest_path, 'r') as f:
             manifest_content = f.read()
-        if 'RECORD_AUDIO' not in manifest_content:
-            permission_tags = '\n    <uses-permission android:name=\"android.permission.RECORD_AUDIO\" />\n    <uses-permission android:name=\"android.permission.MODIFY_AUDIO_SETTINGS\" />'
-            manifest_content = manifest_content.replace('</manifest>', permission_tags + '\n</manifest>')
+        permissions = [
+            'android.permission.RECORD_AUDIO',
+            'android.permission.MODIFY_AUDIO_SETTINGS',
+            'android.permission.CAMERA',
+            'android.permission.CALL_PHONE',
+            'android.permission.FLASHLIGHT'
+        ]
+        needed_tags = ''
+        for p in permissions:
+            if p not in manifest_content:
+                needed_tags += f'\n    <uses-permission android:name=\"{p}\" />'
+        if needed_tags:
+            manifest_content = manifest_content.replace('</manifest>', needed_tags + '\n</manifest>')
             with open(manifest_path, 'w') as f:
                 f.write(manifest_content)
         "
