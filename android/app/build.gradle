@@ -4,7 +4,7 @@ android {
     namespace = "com.jarvis.voiceassistant"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.jarvis.voiceassistant"
+        applicationId "com.sahil.jarvis.assistant"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
