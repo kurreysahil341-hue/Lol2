@@ -30,8 +30,17 @@ jobs:
       with:
         node-version: '22'
 
+    - name: Cache Node Modules
+      id: node-cache
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles('package.json') }}
+        restore-keys: |
+          node-modules-${{ runner.os }}-
+
     - name: Install Dependencies
-      run: npm install --legacy-peer-deps --no-audit --no-fund
+      run: npm install --legacy-peer-deps --no-audit --no-fund --prefer-offline
 
     - name: Automatically Update Android SDK & Gradle Plugin Versions
       env:
@@ -39,9 +48,6 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
         YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
-        CALLING_API_KEY: ${{ secrets.CALLING_API_KEY }}
-        CAMERA_API_KEY: ${{ secrets.CAMERA_API_KEY }}
       run: |
         python3 -c "
         import re
@@ -63,58 +69,8 @@ jobs:
                 content = content.replace('YOUR_YOUTUBE_API_KEY_HERE', youtube_key)
                 print('Successfully baked YouTube API Key into api-config.ts!')
                 
-            maps_key = os.environ.get('GOOGLE_MAPS_API_KEY')
-            if maps_key:
-                content = content.replace('YOUR_GOOGLE_MAPS_API_KEY_HERE', maps_key)
-                print('Successfully baked Google Maps API Key into api-config.ts!')
-                
-            calling_key = os.environ.get('CALLING_API_KEY')
-            if calling_key:
-                content = content.replace('YOUR_CALLING_API_KEY_HERE', calling_key)
-                print('Successfully baked Calling API Key into api-config.ts!')
-                
-            camera_key = os.environ.get('CAMERA_API_KEY')
-            if camera_key:
-                content = content.replace('YOUR_CAMERA_API_KEY_HERE', camera_key)
-                print('Successfully baked Camera API Key into api-config.ts!')
-                
             with open(config_path, 'w') as f:
                 f.write(content)
-
-        # Update build.gradle
-        with open('android/build.gradle', 'r') as f:
-            content = f.read()
-        content = re.sub(r'gradle:[0-9.]+', 'gradle:8.9.1', content)
-        with open('android/build.gradle', 'w') as f:
-            f.write(content)
-
-        # Update variables.gradle
-        with open('android/variables.gradle', 'r') as f:
-            content = f.read()
-        content = re.sub(r'compileSdkVersion = \d+', 'compileSdkVersion = 36', content)
-        content = re.sub(r'targetSdkVersion = \d+', 'targetSdkVersion = 36', content)
-        with open('android/variables.gradle', 'w') as f:
-            f.write(content)
-
-        # Update AndroidManifest.xml permissions
-        manifest_path = 'android/app/src/main/AndroidManifest.xml'
-        with open(manifest_path, 'r') as f:
-            manifest_content = f.read()
-        permissions = [
-            'android.permission.RECORD_AUDIO',
-            'android.permission.MODIFY_AUDIO_SETTINGS',
-            'android.permission.CAMERA',
-            'android.permission.CALL_PHONE',
-            'android.permission.FLASHLIGHT'
-        ]
-        needed_tags = ''
-        for p in permissions:
-            if p not in manifest_content:
-                needed_tags += f'\n    <uses-permission android:name=\"{p}\" />'
-        if needed_tags:
-            manifest_content = manifest_content.replace('</manifest>', needed_tags + '\n</manifest>')
-            with open(manifest_path, 'w') as f:
-                f.write(manifest_content)
         "
 
     - name: Build Web Application
