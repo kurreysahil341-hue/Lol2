@@ -1,5 +1,5 @@
 {
-  "appId": "com.jarvis.voiceassistant",
+  "appId": "com.sahil.jarvis.assistant",
   "appName": "Jarvis Voice Assistant",
   "webDir": "dist",
   "bundledWebRuntime": false
