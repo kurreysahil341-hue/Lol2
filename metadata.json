@@ -1,6 +1,6 @@
 {
-  "name": "Jarvis Voice Assistant",
-  "description": "An Iron Man Jarvis style voice assistant that controls system apps like calling, navigation, search, and camera using Hindi and English voice commands, optimized for mobile APK.",
-  "requestFramePermissions": ["camera", "microphone"],
+  "name": "Teacher Resume Builder",
+  "description": "Professional Resume Builder specifically crafted for Private School and Pre-Primary Teacher applications with clean A4 formal paper layout, live preview, PDF export, and direct printing.",
+  "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
