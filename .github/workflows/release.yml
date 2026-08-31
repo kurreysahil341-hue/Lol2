@@ -1,0 +1,97 @@
+name: Generate Release & ZIP
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - 'main'
+      - 'master'
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Build & Release App
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Crucial for creating a release and uploading assets
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+        continue-on-error: true
+
+      - name: Build Android App (APK)
+        run: ./gradlew assembleDebug
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p release-assets
+          
+          # Rename and copy the built APK
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk release-assets/Teacher-Resume-Builder.apk
+          else
+            echo "Error: APK not found!"
+            exit 1
+          fi
+          
+          # Zip the source code of the project (excluding build caches and IDE files)
+          zip -r release-assets/Teacher-Resume-Builder-Source.zip . -x "*.git*" "*.gradle*" "*app/build*" "*.idea*" "*.build-outputs*" "release-assets*" "debug.keystore.base64"
+
+      - name: Get current date & tag info
+        id: info
+        run: |
+          echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+            echo "tag=v1.0.0-${{ github.sha::8 }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Build Artifacts (Every Push)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Teacher-Resume-Builder-Build
+          path: |
+            release-assets/Teacher-Resume-Builder.apk
+            release-assets/Teacher-Resume-Builder-Source.zip
+
+      - name: Create GitHub Release (On Tags or Manual)
+        if: steps.info.outputs.is_tag == 'true' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.info.outputs.tag }}
+          name: Teacher Resume Builder - Release ${{ steps.info.outputs.tag }}
+          body: |
+            ## 🎉 Teacher Resume Builder Release!
+            
+            Welcome to the automated build release of the **Teacher Resume Builder** application.
+            
+            ### 📦 Release Assets
+            1. **`Teacher-Resume-Builder.apk`** - Install directly on your Android device to run the app.
+            2. **`Teacher-Resume-Builder-Source.zip`** - Clean package containing the entire project source code (perfect for backups or local development).
+            
+            ### 🛠️ Built Automatically On
+            - **Date:** ${{ steps.info.outputs.date }}
+            - **Commit SHA:** `${{ github.sha }}`
+            - **Branch:** `${{ github.ref_name }}`
+          draft: false
+          prerelease: false
+          files: |
+            release-assets/Teacher-Resume-Builder.apk
+            release-assets/Teacher-Resume-Builder-Source.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
