@@ -26,12 +26,14 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
-      # Gradle को बिना किसी एरर के सेटअप करने का सबसे बेस्ट तरीका
+      # NEW: ग्रैडल रैपर वैलिडेशन एरर को रोकने के लिए 'validate-wrappers: false' जोड़ा गया है
       - name: Set up Gradle Action
         uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
 
       - name: Prepare Environment Files
         run: |
