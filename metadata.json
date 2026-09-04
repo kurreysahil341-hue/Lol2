@@ -1,6 +1,6 @@
 {
-  "name": "Teacher Resume Builder",
-  "description": "Professional Resume Builder specifically crafted for Private School and Pre-Primary Teacher applications with clean A4 formal paper layout, live preview, PDF export, and direct printing.",
+  "name": "Dukaan Maths",
+  "description": "Android application configuration files and project structure generator for com.dukaan.maths.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
