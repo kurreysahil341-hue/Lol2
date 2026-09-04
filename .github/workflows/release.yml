@@ -1,168 +1,62 @@
-name: Build, Package & GitHub Release
+name: Android Release CD
 
 on:
   push:
     tags:
       - 'v*'
-      - '*'
-    branches:
-      - 'main'
-      - 'master'
-  workflow_dispatch:
-    inputs:
-      release_title:
-        description: 'Release Title'
-        required: false
-        default: 'Teacher Resume Builder App'
 
 jobs:
-  build-and-release:
-    name: Build APK, Source ZIP & Publish Release
+  release:
+    name: Build & Release Signed APK
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+        cache: 'gradle'
 
-      # 1. ग्रैडल रैपर चेक एरर को रोकने के लिए 'validate-wrappers: false'
-      - name: Set up Gradle Action
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          validate-wrappers: false
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      continue-on-error: true
 
-      - name: Prepare Environment Files
-        run: |
-          if [ ! -f .env ]; then
-            if [ -f .env.example ]; then
-              cp .env.example .env
-            else
-              touch .env
-            fi
-          fi
+    - name: Build Release APK
+      run: ./gradlew assembleRelease --stacktrace
 
-      # 2. ग्रैडल रैपर गायब होने पर ऑटो-रैपर जनरेट करने का सेफ स्टेप
-      - name: Ensure Gradle Wrapper & Permissions
-        run: |
-          if [ ! -f "gradlew" ]; then
-            echo "gradlew not found! Generating gradle wrapper automatically..."
-            gradle wrapper || true
-          fi
-          
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-          fi
+    # Sign the APK (optional, using GitHub Secrets)
+    - name: Sign Release APK
+      uses: r0adkll/sign-android-release@v1
+      id: sign_app
+      with:
+        releaseDirectory: app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+      continue-on-error: true # Falls back to unsigned if signing secrets are not configured yet
 
-      # 3. [CRITICAL] Keystore एरर फिक्स करने के लिए डिकोडर और फॉलबैक की-जेनरेटर
-      - name: Decode Debug Keystore
-        run: |
-          if [ -f "debug.keystore.base64" ]; then
-            echo "Decoding debug.keystore.base64 to debug.keystore..."
-            base64 -d debug.keystore.base64 > debug.keystore
-          else
-            echo "debug.keystore.base64 not found, checking if debug.keystore exists..."
-            if [ ! -f "debug.keystore" ]; then
-              echo "Generating empty debug.keystore fallback..."
-              keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            fi
-          fi
+    - name: Rename Release Files
+      run: |
+        if [ -f "app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+          mv app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/apk/release/DukaanMaths-Release-Unsigned.apk
+        fi
+        if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then
+          mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/DukaanMaths-Release.apk
+        fi
+      continue-on-error: true
 
-      # 4. एंड्रॉइड ऐप APK कम्पाइल स्टेप
-      - name: Build Android App (APK)
-        run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --no-daemon --stacktrace
-          else
-            gradle assembleDebug --no-daemon --stacktrace
-          fi
-
-      # 5. रिलीज एसेट्स (APK और क्लीन प्रोजेक्ट बैकअप ज़िप) तैयार करना
-      - name: Package Release Assets (APK & Clean ZIP)
-        run: |
-          mkdir -p release-assets
-          
-          # APK ढूंढें और रिलीज फोल्डर में कॉपी करें
-          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -n 1)
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find . -name "*.apk" 2>/dev/null | head -n 1)
-          fi
-          
-          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-            echo "Found APK at: $APK_PATH"
-            cp "$APK_PATH" release-assets/Teacher-Resume-Builder.apk
-          else
-            echo "Error: No APK file was generated!"
-            exit 1
-          fi
-          
-          # क्लीन कोड ZIP पैकेज तैयार करना (अनचाहे बिल्ड फोल्डर को हटाकर)
-          zip -r release-assets/Teacher-Resume-Builder-Source.zip . \
-            -x "*.git*" \
-            -x "*.gradle*" \
-            -x "*app/build*" \
-            -x "*build/*" \
-            -x "*.idea*" \
-            -x "*.build-outputs*" \
-            -x "release-assets*" \
-            -x "debug.keystore.base64" \
-            -x "*.apk"
-
-      - name: Calculate Release Tag and Metadata
-        id: release_meta
-        run: |
-          BUILD_DATE=$(date +'%Y-%m-%d %H:%M')
-          echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
-          
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "is_tag=true" >> $GITHUB_OUTPUT
-            echo "tag_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          else
-            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-            echo "is_tag=false" >> $GITHUB_OUTPUT
-            echo "tag_name=v1.0.0-${SHORT_SHA}" >> $GITHUB_OUTPUT
-          fi
-
-      # हर गिट पुश पर एसेट्स को GitHub Actions टैब में स्टोर करना
-      - name: Upload Build Artifacts (Download in Actions Tab)
-        uses: actions/upload-artifact@v4
-        with:
-          name: Teacher-Resume-Builder-Assets
-          path: release-assets/*
-          if-no-files-found: error
-
-      # नया रिलीज टैग होने पर ऑटोमैटिक ऑफिशियल रिलीज पब्लिश करना
-      - name: Publish Official GitHub Release (On Tags or Manual Dispatch)
-        if: steps.release_meta.outputs.is_tag == 'true' || github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release_meta.outputs.tag_name }}
-          name: Teacher Resume Builder (${{ steps.release_meta.outputs.tag_name }})
-          body: |
-            ## 📱 Teacher Resume Builder App
-            
-            स्वचालित रूप से निर्मित बिल्ड और सोर्स पैकेज।
-            
-            ### 📦 डाउनलोड करने के लिए उपलब्ध फाइलें (Release Assets):
-            1. **`Teacher-Resume-Builder.apk`** — अपने मोबाइल में ऐप इंस्टॉल करने के लिए इस APK को डाउनलोड करें।
-            2. **`Teacher-Resume-Builder-Source.zip`** — पूरे प्रोजेक्ट का साफ-सुथरा सोर्स कोड ZIP बैकअप।
-            
-            ---
-            - **Build Date:** ${{ steps.release_meta.outputs.build_date }} UTC
-            - **Commit:** `${{ github.sha }}`
-            - **Branch:** `${{ github.ref_name }}`
-          draft: false
-          prerelease: false
-          files: |
-            release-assets/Teacher-Resume-Builder.apk
-            release-assets/Teacher-Resume-Builder-Source.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          app/build/outputs/apk/release/DukaanMaths-Release.apk
+          app/build/outputs/apk/release/DukaanMaths-Release-Unsigned.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
