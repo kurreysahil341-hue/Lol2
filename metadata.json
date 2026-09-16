@@ -1,6 +1,6 @@
 {
-  "name": "Dukaan Maths",
-  "description": "Android application configuration files and project structure generator for com.dukaan.maths.",
+  "name": "AI Girlfriend Neha",
+  "description": "An interactive, supportive, and emotionally intelligent virtual companion named Neha.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
