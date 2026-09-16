@@ -1,681 +1,497 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+import { useState, useEffect, useRef } from "react";
+import Sidebar from "./components/Sidebar";
+import ChatInterface from "./components/ChatInterface";
+import NehaProfileCard from "./components/NehaProfileCard";
+import SettingsModal from "./components/SettingsModal";
+import { Conversation, Message, UserSettings, NehaState, Archetype } from "./types";
+import { sendMessageToNeha, getNehaSupportNote } from "./services/api";
 
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+const LOCAL_STORAGE_CONVS = "neha_conversations";
+const LOCAL_STORAGE_SETTINGS = "neha_settings";
 
-import React, { useState, useEffect, useRef } from "react";
-import { 
-  ShieldAlert, 
-  Mic, 
-  Camera, 
-  Users, 
-  Settings as SettingsIcon, 
-  Terminal, 
-  Download, 
-  Cpu, 
-  LogOut,
-  Info
-} from "lucide-react";
-import { Contact, VoiceLog, PhotoAsset, SystemStatus } from "./types";
-import { 
-  SpeechRecognition, 
-  speakJarvis, 
-  parseVoiceCommand, 
-  executeSystemAction, 
-  askGeminiJarvis 
-} from "./utils/voice-processor";
+const DEFAULT_SETTINGS: UserSettings = {
+  theme: "light",
+  userName: "Partner",
+  userNickname: "sweetheart",
+  nehaName: "Neha",
+};
 
-import JarvisHUD from "./components/JarvisHUD";
-import JarvisContacts from "./components/JarvisContacts";
-import JarvisCamera from "./components/JarvisCamera";
-import JarvisSettings from "./components/JarvisSettings";
+// Cute lists to rotate Neha's active actions and status to make her feel alive
+const COFFEE_ACTIONS = [
+  "Sipping some hot cardamom chai ☕",
+  "Humming to cozy Indian acoustic lo-fi playlist 🎵",
+  "Reading a heartwarming fiction novel 📖",
+  "Stargazing from her balcony ✨",
+  "Doodling cute doodles on her iPad 🎨",
+  "Watering her little balcony plants 🌱",
+  "Making sweet plans for us 🗺️",
+];
 
 export default function App() {
-  // Navigation Tabs
-  const [activeTab, setActiveTab] = useState<"hud" | "camera" | "contacts" | "settings">("hud");
-
-  // System & Engine States
-  const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isThinking, setIsThinking] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [recognitionError, setRecognitionError] = useState("");
-  const [voiceTriggerShutter, setVoiceTriggerShutter] = useState(false);
-
-  // Persistence States
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [voiceLogs, setVoiceLogs] = useState<VoiceLog[]>([]);
-  const [photos, setPhotos] = useState<PhotoAsset[]>([]);
-
-  // System Health Monitor
-  const [systemStatus, setSystemStatus] = useState<SystemStatus>({
-    microphonePermission: false,
-    cameraPermission: false,
-    voiceEngineReady: false,
-    apiConnected: true,
-    online: navigator.onLine,
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_CONVS);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing conversations", e);
+      }
+    }
+    return [];
   });
 
-  // Speech Recognition Ref
-  const recognitionRef = useRef<any>(null);
-
-  // 1. Initial Setup and Load Persisted Databases
-  useEffect(() => {
-    // A. Pre-populate Contacts if empty
-    const savedContacts = localStorage.getItem("JARVIS_CONTACTS");
-    if (savedContacts) {
-      setContacts(JSON.parse(savedContacts));
-    } else {
-      const defaultContacts: Contact[] = [
-        { id: "c1", name: "Papa", phoneNumber: "+919876543210", relationship: "Father" },
-        { id: "c2", name: "Rahul", phoneNumber: "+918765432109", relationship: "Friend" },
-        { id: "c3", name: "Mummy", phoneNumber: "+917654321098", relationship: "Mother" },
-      ];
-      setContacts(defaultContacts);
-      localStorage.setItem("JARVIS_CONTACTS", JSON.stringify(defaultContacts));
-    }
-
-    // B. Load Voice Command Logs
-    const savedLogs = localStorage.getItem("JARVIS_VOICE_LOGS");
-    if (savedLogs) {
-      setVoiceLogs(JSON.parse(savedLogs));
-    } else {
-      const initialLogs: VoiceLog[] = [
-        {
-          id: "sys-init",
-          timestamp: new Date().toLocaleTimeString(),
-          text: "",
-          response: "All security grids online, Sir. Awaiting audio trigger input.",
-          type: "system",
-        },
-      ];
-      setVoiceLogs(initialLogs);
-    }
-
-    // C. Load Photos
-    const savedPhotos = localStorage.getItem("JARVIS_PHOTOS");
-    if (savedPhotos) {
-      setPhotos(JSON.parse(savedPhotos));
-    }
-
-    // D. Permissions Check
-    checkSystemPermissions();
-
-    // E. Initialize Speech Recognition
-    if (SpeechRecognition) {
-      const rec = new SpeechRecognition();
-      rec.continuous = false; // Tap-to-talk mode
-      rec.interimResults = true;
-      rec.lang = "hi-IN"; // Set default to Hindi-IN (works perfectly with English inputs too)
-
-      rec.onstart = () => {
-        setIsListening(true);
-        setTranscript("");
-        setRecognitionError("");
-      };
-
-      rec.onresult = (event: any) => {
-        const currentTranscript = Array.from(event.results)
-          .map((result: any) => result[0].transcript)
-          .join("");
-        setTranscript(currentTranscript);
-      };
-
-      rec.onerror = (event: any) => {
-        console.error("Speech Recognition Error:", event.error);
-        if (event.error === "not-allowed") {
-          setRecognitionError("Microphone permission denied. Click setup to unlock.");
-        } else {
-          setRecognitionError(`Recognition interference: ${event.error}`);
-        }
-        setIsListening(false);
-      };
-
-      rec.onend = () => {
-        setIsListening(false);
-        // Process transcript if non-empty
-        if (transcript && transcript.trim() !== "") {
-          handleProcessVoiceInput(transcript);
-        }
-      };
-
-      recognitionRef.current = rec;
-      setSystemStatus(prev => ({ ...prev, voiceEngineReady: true }));
-    } else {
-      setRecognitionError("Core Speech recognition not natively supported on this browser.");
-    }
-
-    // Speech synthesis voices loading
-    if (window.speechSynthesis) {
-      window.speechSynthesis.getVoices();
-    }
-
-    // Online/Offline status listeners
-    const handleOnline = () => setSystemStatus((prev) => ({ ...prev, online: true }));
-    const handleOffline = () => setSystemStatus((prev) => ({ ...prev, online: false }));
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, [transcript]);
-
-  const checkSystemPermissions = async () => {
-    try {
-      const micPermission = await navigator.permissions.query({ name: "microphone" as any }).catch(() => null);
-      const camPermission = await navigator.permissions.query({ name: "camera" as any }).catch(() => null);
-
-      setSystemStatus((prev) => ({
-        ...prev,
-        microphonePermission: micPermission?.state === "granted",
-        cameraPermission: camPermission?.state === "granted",
-      }));
-
-      if (micPermission) {
-        micPermission.onchange = () => {
-          setSystemStatus((prev) => ({ ...prev, microphonePermission: micPermission.state === "granted" }));
-        };
-      }
-      if (camPermission) {
-        camPermission.onchange = () => {
-          setSystemStatus((prev) => ({ ...prev, cameraPermission: camPermission.state === "granted" }));
-        };
-      }
-    } catch (e) {
-      // Permission query API fallback
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
-        setSystemStatus((prev) => ({ ...prev, microphonePermission: true }));
-      }).catch(() => {});
-    }
-  };
-
-  // 2. Add New Log entry
-  const appendVoiceLog = (log: VoiceLog) => {
-    setVoiceLogs((prev) => {
-      const updated = [log, ...prev].slice(0, 50); // Keep last 50 logs
-      localStorage.setItem("JARVIS_VOICE_LOGS", JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-    // Torch state variable tracker
-    const [torchTrack, setTorchTrack] = useState<MediaStreamTrack | null>(null);
-
-    const toggleTorchLocal = async (on: boolean) => {
+  const [activeId, setActiveId] = useState<string | null>(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_CONVS);
+    if (saved) {
       try {
-        if (on) {
-          const mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" },
-          });
-          const track = mediaStream.getVideoTracks()[0];
-          if (track) {
-            // Apply torch state constraints (Standard Web/Capacitor API)
-            try {
-              await track.applyConstraints({
-                advanced: [{ torch: true } as any]
-              });
-            } catch (err) {
-              console.warn("Torch hardware control failed, streaming camera instead.");
-            }
-            setTorchTrack(track);
-          }
-        } else {
-          if (torchTrack) {
-            try {
-              await torchTrack.applyConstraints({
-                advanced: [{ torch: false } as any]
-              });
-            } catch (err) {}
-            torchTrack.stop();
-            setTorchTrack(null);
-          }
-        }
+        const parsed = JSON.parse(saved);
+        return parsed.length > 0 ? parsed[0].id : null;
       } catch (e) {
-        console.warn("Flashlight API not fully supported in this environment. Falling back to sci-fi log.");
+        return null;
       }
-    };
+    }
+    return null;
+  });
 
-    // 3. Process Final Audio Commands
-    const handleProcessVoiceInput = async (spokenText: string) => {
-      setTranscript(""); // Clear active text
-      setIsThinking(true);
-  
-      const logId = Math.random().toString();
-      const commandLog: VoiceLog = {
-        id: logId,
-        timestamp: new Date().toLocaleTimeString(),
-        text: spokenText,
-        response: "Analyzing commands...",
-        type: "command",
-      };
-      appendVoiceLog(commandLog);
-  
-      // Parse the triggers in Hindi / English
-      const parsed = parseVoiceCommand(spokenText, contacts);
-
-      // Handle unauthorized command (Missing Jarvis Wake Word)
-      if (parsed.action === "none") {
-        setIsThinking(false);
-        setVoiceLogs((prev) => {
-          const updated = prev.map((l) =>
-            l.id === logId
-              ? {
-                  ...l,
-                  response: "Security protocol active. Wake word 'Jarvis' not detected. Command ignored, Sir.",
-                  type: "error" as const,
-                }
-              : l
-          );
-          localStorage.setItem("JARVIS_VOICE_LOGS", JSON.stringify(updated));
-          return updated;
-        });
-        return;
-      }
-  
-      // Action A: Camera Click command
-      if (parsed.action === "camera") {
-        setIsThinking(false);
-        setIsSpeaking(true);
-        setActiveTab("camera");
-        setVoiceTriggerShutter(true); // Pre-arm shutter trigger
-  
-        speakJarvis(parsed.speakText, "hi-IN", () => {
-          setIsSpeaking(false);
-        });
-  
-        setVoiceLogs((prev) => {
-          const updated = prev.map((l) =>
-            l.id === logId
-              ? {
-                  ...l,
-                  response: parsed.speakText,
-                  actionTriggered: "IN-APP CAMERA PHOTO CLICK",
-                }
-              : l
-          );
-          localStorage.setItem("JARVIS_VOICE_LOGS", JSON.stringify(updated));
-          return updated;
-        });
-        return;
-      }
-  
-      // Action B: Google Maps, WhatsApp, YouTube, Flashlight, Gmail, Spotify or other System App Intents
-      if (
-        parsed.action !== "gemini" && 
-        parsed.action !== "help"
-      ) {
-        setIsThinking(false);
-        setIsSpeaking(true);
-  
-        speakJarvis(parsed.speakText, "hi-IN", () => {
-          setIsSpeaking(false);
-          
-          // Trigger Local Flashlight hardware if requested
-          if (parsed.action === "torch_on") {
-            toggleTorchLocal(true);
-          } else if (parsed.action === "torch_off") {
-            toggleTorchLocal(false);
-          } else {
-            // Trigger native deep links / intents redirection
-            executeSystemAction(parsed.action as any, parsed.queryParam, parsed.phoneParam);
-          }
-        });
-  
-        setVoiceLogs((prev) => {
-          const updated = prev.map((l) =>
-            l.id === logId
-              ? {
-                  ...l,
-                  response: parsed.speakText,
-                  actionTriggered: `${parsed.action.toUpperCase()} INTENT LAUNCHED`,
-                }
-              : l
-          );
-          localStorage.setItem("JARVIS_VOICE_LOGS", JSON.stringify(updated));
-          return updated;
-        });
-        return;
-      }
-
-    // Action C: Ask Gemini AI for Jarvis Response (Intelligent chat)
-    if (parsed.action === "gemini" || parsed.action === "help") {
+  const [settings, setSettings] = useState<UserSettings>(() => {
+    const saved = localStorage.getItem(LOCAL_STORAGE_SETTINGS);
+    if (saved) {
       try {
-        let answerText = "";
-        
-        if (parsed.action === "help" || (parsed.speakText && parsed.speakText.trim() !== "")) {
-          answerText = parsed.speakText;
-        } else {
-          answerText = await askGeminiJarvis(spokenText);
-        }
-
-        setIsThinking(false);
-        setIsSpeaking(true);
-
-        speakJarvis(answerText, "hi-IN", () => {
-          setIsSpeaking(false);
-        });
-
-        setVoiceLogs((prev) => {
-          const updated = prev.map((l) =>
-            l.id === logId
-              ? {
-                  ...l,
-                  response: answerText,
-                  type: "gemini" as const,
-                }
-              : l
-          );
-          localStorage.setItem("JARVIS_VOICE_LOGS", JSON.stringify(updated));
-          return updated;
-        });
-      } catch (error: any) {
-        setIsThinking(false);
-        setIsSpeaking(true);
-        const errMsg = "Apologies, Sir. Interferences detected in the main memory cores.";
-        
-        speakJarvis(errMsg, "hi-IN", () => {
-          setIsSpeaking(false);
-        });
-
-        setVoiceLogs((prev) => {
-          const updated = prev.map((l) =>
-            l.id === logId
-              ? {
-                  ...l,
-                  response: errMsg,
-                  type: "error" as const,
-                }
-              : l
-          );
-          localStorage.setItem("JARVIS_VOICE_LOGS", JSON.stringify(updated));
-          return updated;
-        });
+        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+      } catch (e) {
+        return DEFAULT_SETTINGS;
       }
     }
-  };
+    return DEFAULT_SETTINGS;
+  });
 
-  // 4. Listen Trigger (Toggle state)
-  const toggleListening = () => {
-    if (isListening) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      setIsListening(false);
+  // Companion status parameters
+  const [nehaState, setNehaState] = useState<NehaState>({
+    mood: "Happy & Warm 🥰",
+    activity: "Waiting to hear from you 📱",
+    affectionLevel: 75,
+    favoriteTopic: "Planning our dream virtual date 🗺️",
+  });
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Thought notes states
+  const [generatedNote, setGeneratedNote] = useState<string | null>(null);
+  const [isGeneratingNote, setIsGeneratingNote] = useState(false);
+
+  // Persist conversations
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_CONVS, JSON.stringify(conversations));
+  }, [conversations]);
+
+  // Auto-create a first conversation if list is empty on mount
+  useEffect(() => {
+    if (conversations.length === 0) {
+      const initialConv: Conversation = {
+        id: Math.random().toString(36).substring(2, 11),
+        title: "New Chat",
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archetype: "warm",
+      };
+      setConversations([initialConv]);
+      setActiveId(initialConv.id);
+    }
+  }, []);
+
+  // Persist settings & sync theme
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_SETTINGS, JSON.stringify(settings));
+    if (settings.theme === "dark") {
+      document.documentElement.classList.add("dark");
     } else {
-      if (recognitionRef.current) {
-        // Trigger short audio start confirmation chime
-        try {
-          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const osc = audioCtx.createOscillator();
-          const gainNode = audioCtx.createGain();
-          osc.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
-          osc.type = "sine";
-          osc.frequency.setValueAtTime(600, audioCtx.currentTime);
-          osc.frequency.setValueAtTime(1000, audioCtx.currentTime + 0.08);
-          gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-          osc.start();
-          osc.stop(audioCtx.currentTime + 0.2);
-        } catch (e) {}
+      document.documentElement.classList.remove("dark");
+    }
+  }, [settings]);
 
-        recognitionRef.current.start();
-      } else {
-        setRecognitionError("Voice engine not ready or unsupported on this device.");
+  // Get active conversation archetype to sync Neha's state
+  const activeConversation = conversations.find((c) => c.id === activeId);
+  const activeArchetype = activeConversation?.archetype || "warm";
+
+  // Dynamic status updater based on conversations
+  useEffect(() => {
+    if (activeArchetype === "witty") {
+      setNehaState((prev) => ({
+        ...prev,
+        mood: "Playful & Teasing 😜",
+        favoriteTopic: "Sarcastic banter and funny jokes 😂",
+        activity: COFFEE_ACTIONS[Math.floor(Math.random() * COFFEE_ACTIONS.length)],
+      }));
+    } else if (activeArchetype === "motivating") {
+      setNehaState((prev) => ({
+        ...prev,
+        mood: "Inspirational & High Energy 🚀",
+        favoriteTopic: "Crushing goals and building our dream future 🌟",
+        activity: "Writing an encouraging note for you ✍️",
+      }));
+    } else {
+      setNehaState((prev) => ({
+        ...prev,
+        mood: "Loving & Supportive 🥰",
+        favoriteTopic: "Cozy rainy-day blanket chats 🌧️☕",
+        activity: "Sipping sweet cardamom chai 🍵",
+      }));
+    }
+  }, [activeArchetype]);
+
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim()) return;
+    setError(null);
+
+    let currentConvId = activeId;
+    let updatedConversations = [...conversations];
+
+    // 1. Create a conversation on the fly if none is active
+    if (!currentConvId) {
+      const newConv: Conversation = {
+        id: Math.random().toString(36).substring(2, 11),
+        title: text.length > 25 ? text.substring(0, 25) + "..." : text,
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archetype: "warm",
+      };
+      updatedConversations = [newConv, ...updatedConversations];
+      setConversations(updatedConversations);
+      setActiveId(newConv.id);
+      currentConvId = newConv.id;
+    }
+
+    // Find the target conversation
+    const convIndex = updatedConversations.findIndex((c) => c.id === currentConvId);
+    if (convIndex === -1) return;
+
+    const targetConv = updatedConversations[convIndex];
+
+    const newUserMessage: Message = {
+      id: Math.random().toString(36).substring(2, 11),
+      role: "user",
+      content: text,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Update conversation state locally
+    const nextMessages = [...targetConv.messages, newUserMessage];
+    const renamedTitle =
+      targetConv.messages.length === 0
+        ? text.length > 25
+          ? text.substring(0, 25) + "..."
+          : text
+        : targetConv.title;
+
+    const updatedConv = {
+      ...targetConv,
+      title: renamedTitle,
+      messages: nextMessages,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextConversations = [
+      updatedConv,
+      ...updatedConversations.filter((c) => c.id !== currentConvId),
+    ];
+    setConversations(nextConversations);
+
+    // Cancel any active request to prevent duplicate/race conditions
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const reply = await sendMessageToNeha(nextMessages, targetConv.archetype, settings.userNickname, controller.signal);
+
+      const newModelMessage: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        role: "model",
+        content: reply,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Add model reply to state
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === currentConvId
+            ? { ...c, messages: [...c.messages, newModelMessage], updatedAt: new Date().toISOString() }
+            : c
+        )
+      );
+
+      // Boost affection dynamically
+      setNehaState((prev) => ({
+        ...prev,
+        affectionLevel: Math.min(100, prev.affectionLevel + 2),
+        activity: COFFEE_ACTIONS[Math.floor(Math.random() * COFFEE_ACTIONS.length)],
+      }));
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("Communication aborted by user request.");
+        return;
+      }
+      setError(err.message || "Failed to communicate with Neha");
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const handleRetryMessage = async () => {
+    if (!activeId) return;
+    const active = conversations.find((c) => c.id === activeId);
+    if (!active || active.messages.length === 0) return;
+
+    // Retrieve the last user message
+    const lastUserMsg = [...active.messages].reverse().find((m) => m.role === "user");
+    if (!lastUserMsg) return;
+
+    // Remove any trailing model/error message to perform a clean retry
+    const filteredMsgs = active.messages.filter((m) => m.id !== lastUserMsg.id && m.role === "user");
+    
+    // Set active list
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId
+          ? { ...c, messages: [...filteredMsgs] }
+          : c
+      )
+    );
+
+    // Re-send the text
+    await handleSendMessage(lastUserMsg.content);
+  };
+
+  const handleRegenerateResponse = async () => {
+    if (!activeId) return;
+    const targetId = activeId;
+    setError(null);
+
+    const active = conversations.find((c) => c.id === targetId);
+    if (!active || active.messages.length === 0) return;
+
+    // Filter out the last model message to replace it
+    const lastModelIndex = [...active.messages].reverse().findIndex((m) => m.role === "model");
+    if (lastModelIndex === -1) return;
+
+    const actualIndex = active.messages.length - 1 - lastModelIndex;
+    const historyWithoutLastReply = active.messages.slice(0, actualIndex);
+
+    setConversations((prev) =>
+      prev.map((c) => (c.id === targetId ? { ...c, messages: historyWithoutLastReply } : c))
+    );
+
+    // Cancel any active request to prevent duplicate/race conditions
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsLoading(true);
+
+    try {
+      const reply = await sendMessageToNeha(historyWithoutLastReply, active.archetype, settings.userNickname, controller.signal);
+
+      const newModelMessage: Message = {
+        id: Math.random().toString(36).substring(2, 11),
+        role: "model",
+        content: reply,
+        timestamp: new Date().toISOString(),
+      };
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === targetId
+            ? { ...c, messages: [...c.messages, newModelMessage], updatedAt: new Date().toISOString() }
+            : c
+        )
+      );
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("Regeneration aborted by user request.");
+        return;
+      }
+      setError(err.message || "Failed to regenerate reply");
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setIsLoading(false);
+    }
+  };
+
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+  };
+
+  const handleDeleteMessage = (messageId: string) => {
+    if (!activeId) return;
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeId ? { ...c, messages: c.messages.filter((m) => m.id !== messageId) } : c
+      )
+    );
+  };
+
+  const handleCreateConversation = () => {
+    const newConv: Conversation = {
+      id: Math.random().toString(36).substring(2, 11),
+      title: "New Chat",
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      archetype: "warm",
+    };
+    setConversations((prev) => [newConv, ...prev]);
+    setActiveId(newConv.id);
+  };
+
+  const handleDeleteConversation = (id: string) => {
+    const remaining = conversations.filter((c) => c.id !== id);
+    if (remaining.length === 0) {
+      const newConv: Conversation = {
+        id: Math.random().toString(36).substring(2, 11),
+        title: "New Chat",
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        archetype: "warm",
+      };
+      setConversations([newConv]);
+      setActiveId(newConv.id);
+    } else {
+      setConversations(remaining);
+      if (activeId === id) {
+        setActiveId(remaining[0].id);
       }
     }
   };
 
-  // 5. Contacts management
-  const handleAddContact = (newContact: Omit<Contact, "id">) => {
-    const contact: Contact = {
-      id: Math.random().toString(),
-      ...newContact,
-    };
-    const updated = [contact, ...contacts];
-    setContacts(updated);
-    localStorage.setItem("JARVIS_CONTACTS", JSON.stringify(updated));
-    
-    appendVoiceLog({
-      id: Math.random().toString(),
-      timestamp: new Date().toLocaleTimeString(),
-      text: "",
-      response: `Linked contact profile: "${contact.name}" authorized.`,
-      type: "system",
-    });
+  const handleRenameConversation = (id: string, newTitle: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title: newTitle, updatedAt: new Date().toISOString() } : c))
+    );
   };
 
-  const handleDeleteContact = (id: string) => {
-    const updated = contacts.filter((c) => c.id !== id);
-    setContacts(updated);
-    localStorage.setItem("JARVIS_CONTACTS", JSON.stringify(updated));
+  const handleSaveSettings = (newSettings: UserSettings) => {
+    setSettings(newSettings);
   };
 
-  // 6. Camera Photo Captured
-  const handlePhotoCaptured = (newPhoto: Omit<PhotoAsset, "id">) => {
-    const photo: PhotoAsset = {
-      id: Math.random().toString(),
-      ...newPhoto,
-    };
-    const updated = [photo, ...photos];
-    setPhotos(updated);
-    localStorage.setItem("JARVIS_PHOTOS", JSON.stringify(updated));
-
-    appendVoiceLog({
-      id: Math.random().toString(),
-      timestamp: new Date().toLocaleTimeString(),
-      text: "",
-      response: "Visual scan stored successfully in local tactical archives, Sir.",
-      type: "system",
-    });
-
-    // Speak confirmation
-    speakJarvis("Photo clicked successfully, Sir. Saved to your tactical grid.", "hi-IN");
+  const handleToggleTheme = () => {
+    setSettings((prev) => ({
+      ...prev,
+      theme: prev.theme === "light" ? "dark" : "light",
+    }));
   };
 
-  const handleDeletePhoto = (id: string) => {
-    const updated = photos.filter((p) => p.id !== id);
-    setPhotos(updated);
-    localStorage.setItem("JARVIS_PHOTOS", JSON.stringify(updated));
+  const handleSwitchArchetypeInActiveConv = (arch: Archetype) => {
+    if (!activeId) return;
+    setConversations((prev) =>
+      prev.map((c) => (c.id === activeId ? { ...c, archetype: arch } : c))
+    );
+  };
+
+  const handleTriggerSupportNote = async (context: string) => {
+    setIsGeneratingNote(true);
+    try {
+      const note = await getNehaSupportNote(context, activeArchetype);
+      setGeneratedNote(note);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsGeneratingNote(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative" id="jarvis-app-root">
-      {/* Visual background atmospheric elements */}
-      <div className="absolute top-0 left-0 right-0 h-[400px] bg-gradient-to-b from-cyan-950/20 to-transparent pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-900/5 rounded-full filter blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/3 right-0 w-96 h-96 bg-red-900/5 rounded-full filter blur-[120px] pointer-events-none" />
+    <div className="flex h-screen w-screen overflow-hidden bg-neutral-100 dark:bg-neutral-950 font-sans text-neutral-800 dark:text-neutral-100">
+      {/* Responsive Sidebar for Chat History */}
+      <Sidebar
+        conversations={conversations}
+        activeId={activeId}
+        onSelectConversation={setActiveId}
+        onCreateConversation={handleCreateConversation}
+        onDeleteConversation={handleDeleteConversation}
+        onRenameConversation={handleRenameConversation}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        theme={settings.theme}
+        onToggleTheme={handleToggleTheme}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
 
-      {/* Main Premium HUD Top Header bar */}
-      <header className="border-b border-cyan-500/10 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 border border-cyan-400 rounded-lg flex items-center justify-center bg-cyan-950/40 relative group">
-            <Cpu className="w-5 h-5 text-cyan-400 animate-pulse group-hover:rotate-180 transition-transform duration-500" />
-            <span className="absolute -inset-0.5 bg-cyan-400/20 rounded-lg filter blur-sm group-hover:opacity-100 opacity-50 transition-opacity" />
-          </div>
-          <div className="flex flex-col">
-            <h1 className="text-sm font-bold tracking-[0.2em] font-mono text-cyan-200 uppercase">
-              J.A.R.V.I.S. VOICE ASSISTANT
-            </h1>
-            <span className="text-[9px] tracking-widest text-cyan-400/50 font-mono">
-              VIVO Y29 MOBILE SYSTEMS // CORE INTEGRATION
-            </span>
-          </div>
-        </div>
+      {/* Main Container */}
+      <main className="flex-1 flex flex-row overflow-hidden relative h-full">
+        {/* Central Chat Interface */}
+        <ChatInterface
+          messages={activeConversation ? activeConversation.messages : []}
+          onSendMessage={handleSendMessage}
+          isLoading={isLoading}
+          onClearHistory={() => {
+            if (activeId) {
+              setConversations((prev) =>
+                prev.map((c) => (c.id === activeId ? { ...c, messages: [] } : c))
+              );
+            }
+          }}
+          archetype={activeArchetype}
+          settings={settings}
+          nehaState={nehaState}
+          onToggleSidebar={() => setIsSidebarOpen(true)}
+          onRegenerateResponse={handleRegenerateResponse}
+          onDeleteMessage={handleDeleteMessage}
+          onSelectPrompt={handleSendMessage}
+          error={error}
+          onRetry={handleRetryMessage}
+          onStopGeneration={handleStopGeneration}
+        />
 
-        {/* Global Action Guides */}
-        <div className="hidden md:flex items-center gap-4 text-xs font-mono">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-cyan-950/30 border border-cyan-500/10 rounded-full">
-            <Info className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-cyan-300 text-[10px]">
-              Speak Hindi: &quot;Call Papa&quot;, &quot;Camera mein photo kheencho&quot;
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Body Grid */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
-        
-        {/* LEFT COLUMN: Main holographic visual orb HUD & Console Logs (Column span 7) */}
-        <section className="lg:col-span-7 flex flex-col gap-6">
-          {recognitionError && (
-            <div className="bg-red-950/30 border border-red-500/30 p-3.5 rounded-xl flex items-center gap-3 text-red-300 font-mono text-[11px] shadow-md animate-bounce">
-              <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
-              <span>{recognitionError}</span>
-            </div>
-          )}
-
-          <JarvisHUD
-            isListening={isListening}
-            isSpeaking={isSpeaking}
-            isThinking={isThinking}
-            transcript={transcript}
-            voiceLogs={voiceLogs}
-            onToggleListen={toggleListening}
-            systemStatus={systemStatus}
+        {/* Desktop Right Panel: Neha Profile & State Monitor */}
+        <div className="hidden xl:flex w-80 border-l border-neutral-150 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 overflow-y-auto flex-col gap-4 shrink-0">
+          <h3 className="text-xs font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider pl-1">
+            Companion Status
+          </h3>
+          <NehaProfileCard
+            archetype={activeArchetype}
+            onChangeArchetype={handleSwitchArchetypeInActiveConv}
+            state={nehaState}
+            onTriggerNote={handleTriggerSupportNote}
+            isGeneratingNote={isGeneratingNote}
+            generatedNote={generatedNote}
+            nehaName={settings.nehaName}
+            nehaAvatar={settings.nehaAvatar}
           />
-        </section>
-
-        {/* RIGHT COLUMN: Tab Panel directory selector (Column span 5) */}
-        <section className="lg:col-span-5 flex flex-col gap-4">
-          
-          {/* Futuristic Tactical Tab controls */}
-          <nav className="flex border border-cyan-500/20 bg-slate-950/60 p-1.5 rounded-xl font-mono text-[11px] tracking-wider uppercase">
-            <button
-              onClick={() => setActiveTab("hud")}
-              className={`flex-1 py-2 rounded-lg text-center font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                activeTab === "hud"
-                  ? "bg-cyan-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(6,182,212,0.3)]"
-                  : "text-cyan-400/60 hover:text-cyan-300"
-              }`}
-            >
-              <Cpu className="w-3.5 h-3.5" /> HUD CORE
-            </button>
-            <button
-              onClick={() => setActiveTab("camera")}
-              className={`flex-1 py-2 rounded-lg text-center font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                activeTab === "camera"
-                  ? "bg-cyan-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(6,182,212,0.3)]"
-                  : "text-cyan-400/60 hover:text-cyan-300"
-              }`}
-            >
-              <Camera className="w-3.5 h-3.5" /> CAMERA
-            </button>
-            <button
-              onClick={() => setActiveTab("contacts")}
-              className={`flex-1 py-2 rounded-lg text-center font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                activeTab === "contacts"
-                  ? "bg-cyan-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(6,182,212,0.3)]"
-                  : "text-cyan-400/60 hover:text-cyan-300"
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" /> CONTACTS
-            </button>
-            <button
-              onClick={() => setActiveTab("settings")}
-              className={`flex-1 py-2 rounded-lg text-center font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                activeTab === "settings"
-                  ? "bg-cyan-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(6,182,212,0.3)]"
-                  : "text-cyan-400/60 hover:text-cyan-300"
-              }`}
-            >
-              <SettingsIcon className="w-3.5 h-3.5" /> SETUP
-            </button>
-          </nav>
-
-          {/* Active component render view */}
-          <div className="flex-1 flex flex-col">
-            {activeTab === "hud" && (
-              <div className="border border-cyan-500/10 bg-slate-950/50 p-6 rounded-2xl flex flex-col gap-4 font-mono text-xs relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-3 h-3 border-t border-r border-cyan-400/30" />
-                <div className="absolute bottom-0 left-0 w-3 h-3 border-b border-l border-cyan-400/30" />
-                
-                <h3 className="text-cyan-300 font-bold uppercase tracking-widest border-b border-cyan-500/10 pb-3 mb-1">
-                  Jarvis Command Matrix Guide
-                </h3>
-                
-                <p className="text-[11px] text-cyan-400/60 leading-relaxed">
-                  Welcome to the tactical system command console. Here are the fully operational voice commands you can speak directly:
-                </p>
-
-                <div className="flex flex-col gap-3">
-                  <div className="p-3 bg-slate-900/40 border border-cyan-500/10 rounded-lg">
-                    <span className="text-cyan-300 font-bold block mb-1">🚗 GOOGLE MAPS NAVIGATION:</span>
-                    <span className="text-cyan-100 italic">&ldquo;Navigate to Delhi&rdquo;</span> or <br />
-                    <span className="text-cyan-100 italic">&ldquo;Delhi ki navigation on karo&rdquo;</span>
-                  </div>
-
-                  <div className="p-3 bg-slate-900/40 border border-cyan-500/10 rounded-lg">
-                    <span className="text-cyan-300 font-bold block mb-1">📞 CALL CONTACTS:</span>
-                    <span className="text-cyan-100 italic">&ldquo;Call Papa&rdquo;</span> or <br />
-                    <span className="text-cyan-100 italic">&ldquo;Rahul ko call karo&rdquo;</span>
-                  </div>
-
-                  <div className="p-3 bg-slate-900/40 border border-cyan-500/10 rounded-lg">
-                    <span className="text-cyan-300 font-bold block mb-1">📸 IN-APP TACTICAL CAMERA:</span>
-                    <span className="text-cyan-100 italic">&ldquo;Camera mein photo click karo&rdquo;</span> or <br />
-                    <span className="text-cyan-100 italic">&ldquo;Click photo&rdquo;</span>
-                  </div>
-
-                  <div className="p-3 bg-slate-900/40 border border-cyan-500/10 rounded-lg">
-                    <span className="text-cyan-300 font-bold block mb-1">🎵 YOUTUBE SEARCH:</span>
-                    <span className="text-cyan-100 italic">&ldquo;YouTube par Arijit Singh search karo&rdquo;</span>
-                  </div>
-
-                  <div className="p-3 bg-slate-900/40 border border-cyan-500/10 rounded-lg">
-                    <span className="text-cyan-300 font-bold block mb-1">🤖 GEMINI COGNITIVE INTEL:</span>
-                    <span className="text-cyan-100 italic">&ldquo;Who is Tony Stark?&rdquo;</span> or <br />
-                    <span className="text-cyan-100 italic">&ldquo;Ek joke sunao Hindi mein&rdquo;</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "camera" && (
-              <JarvisCamera
-                onPhotoCaptured={handlePhotoCaptured}
-                photos={photos}
-                onDeletePhoto={handleDeletePhoto}
-                voiceTriggerShutter={voiceTriggerShutter}
-                onResetVoiceTrigger={() => setVoiceTriggerShutter(false)}
-              />
-            )}
-
-            {activeTab === "contacts" && (
-              <JarvisContacts
-                contacts={contacts}
-                onAddContact={handleAddContact}
-                onDeleteContact={handleDeleteContact}
-              />
-            )}
-
-            {activeTab === "settings" && (
-              <JarvisSettings />
-            )}
-          </div>
-        </section>
+        </div>
       </main>
 
-      {/* Footer system diagnostics bar */}
-      <footer className="border-t border-cyan-500/10 bg-slate-950/80 backdrop-blur-md px-6 py-3 font-mono text-[9px] text-cyan-400/50 flex flex-col sm:flex-row items-center justify-between gap-3 mt-auto">
-        <span className="uppercase tracking-wider">
-          Diagnostic System: ALL INTEGRITY LEVELS STABLE [SEC_ACC: LEVEL_5]
-        </span>
-        <div className="flex items-center gap-4">
-          <span>LATENCY: 42MS</span>
-          <span>BATT_INTEL: DIRECT</span>
-          <span>FRAMEWARE: VIVO Y29</span>
-        </div>
-      </footer>
+      {/* Profile / Preferences Settings Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onSaveSettings={handleSaveSettings}
+        currentArchetype={activeArchetype}
+        onChangeArchetype={handleSwitchArchetypeInActiveConv}
+      />
     </div>
   );
 }
-
