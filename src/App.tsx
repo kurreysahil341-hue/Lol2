@@ -1,497 +1,251 @@
-import { useState, useEffect, useRef } from "react";
-import Sidebar from "./components/Sidebar";
-import ChatInterface from "./components/ChatInterface";
-import NehaProfileCard from "./components/NehaProfileCard";
-import SettingsModal from "./components/SettingsModal";
-import { Conversation, Message, UserSettings, NehaState, Archetype } from "./types";
-import { sendMessageToNeha, getNehaSupportNote } from "./services/api";
-
-const LOCAL_STORAGE_CONVS = "neha_conversations";
-const LOCAL_STORAGE_SETTINGS = "neha_settings";
-
-const DEFAULT_SETTINGS: UserSettings = {
-  theme: "light",
-  userName: "Partner",
-  userNickname: "sweetheart",
-  nehaName: "Neha",
-};
-
-// Cute lists to rotate Neha's active actions and status to make her feel alive
-const COFFEE_ACTIONS = [
-  "Sipping some hot cardamom chai ☕",
-  "Humming to cozy Indian acoustic lo-fi playlist 🎵",
-  "Reading a heartwarming fiction novel 📖",
-  "Stargazing from her balcony ✨",
-  "Doodling cute doodles on her iPad 🎨",
-  "Watering her little balcony plants 🌱",
-  "Making sweet plans for us 🗺️",
-];
+import React, { useState } from 'react';
+import { 
+  Copy, 
+  Check, 
+  Terminal, 
+  Layers, 
+  Smartphone, 
+  Download, 
+  Cpu, 
+  Zap, 
+  SlidersHorizontal,
+  FileCode,
+  Volume2
+} from 'lucide-react';
+import { PhoneSimulator } from './components/PhoneSimulator';
+import { CodeViewer } from './components/CodeViewer';
+import { LayoutInspector } from './components/LayoutInspector';
+import { ACTIVITY_MAIN_XML } from './data/androidFiles';
+import { downloadAndroidProjectZip } from './utils/zipExporter';
 
 export default function App() {
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_CONVS);
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Error parsing conversations", e);
-      }
-    }
-    return [];
-  });
+  const [isServiceActive, setIsServiceActive] = useState(true);
+  const [isOfflineMode, setIsOfflineMode] = useState(true);
+  const [selectedViewId, setSelectedViewId] = useState<string | undefined>('btnMic');
+  const [headerCopied, setHeaderCopied] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [zipProgress, setZipProgress] = useState(0);
+  const [rightPanelTab, setRightPanelTab] = useState<'code' | 'inspector'>('code');
 
-  const [activeId, setActiveId] = useState<string | null>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_CONVS);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed.length > 0 ? parsed[0].id : null;
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  });
-
-  const [settings, setSettings] = useState<UserSettings>(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_SETTINGS);
-    if (saved) {
-      try {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-      } catch (e) {
-        return DEFAULT_SETTINGS;
-      }
-    }
-    return DEFAULT_SETTINGS;
-  });
-
-  // Companion status parameters
-  const [nehaState, setNehaState] = useState<NehaState>({
-    mood: "Happy & Warm 🥰",
-    activity: "Waiting to hear from you 📱",
-    affectionLevel: 75,
-    favoriteTopic: "Planning our dream virtual date 🗺️",
-  });
-
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Thought notes states
-  const [generatedNote, setGeneratedNote] = useState<string | null>(null);
-  const [isGeneratingNote, setIsGeneratingNote] = useState(false);
-
-  // Persist conversations
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_CONVS, JSON.stringify(conversations));
-  }, [conversations]);
-
-  // Auto-create a first conversation if list is empty on mount
-  useEffect(() => {
-    if (conversations.length === 0) {
-      const initialConv: Conversation = {
-        id: Math.random().toString(36).substring(2, 11),
-        title: "New Chat",
-        messages: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        archetype: "warm",
-      };
-      setConversations([initialConv]);
-      setActiveId(initialConv.id);
-    }
-  }, []);
-
-  // Persist settings & sync theme
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_SETTINGS, JSON.stringify(settings));
-    if (settings.theme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [settings]);
-
-  // Get active conversation archetype to sync Neha's state
-  const activeConversation = conversations.find((c) => c.id === activeId);
-  const activeArchetype = activeConversation?.archetype || "warm";
-
-  // Dynamic status updater based on conversations
-  useEffect(() => {
-    if (activeArchetype === "witty") {
-      setNehaState((prev) => ({
-        ...prev,
-        mood: "Playful & Teasing 😜",
-        favoriteTopic: "Sarcastic banter and funny jokes 😂",
-        activity: COFFEE_ACTIONS[Math.floor(Math.random() * COFFEE_ACTIONS.length)],
-      }));
-    } else if (activeArchetype === "motivating") {
-      setNehaState((prev) => ({
-        ...prev,
-        mood: "Inspirational & High Energy 🚀",
-        favoriteTopic: "Crushing goals and building our dream future 🌟",
-        activity: "Writing an encouraging note for you ✍️",
-      }));
-    } else {
-      setNehaState((prev) => ({
-        ...prev,
-        mood: "Loving & Supportive 🥰",
-        favoriteTopic: "Cozy rainy-day blanket chats 🌧️☕",
-        activity: "Sipping sweet cardamom chai 🍵",
-      }));
-    }
-  }, [activeArchetype]);
-
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim()) return;
-    setError(null);
-
-    let currentConvId = activeId;
-    let updatedConversations = [...conversations];
-
-    // 1. Create a conversation on the fly if none is active
-    if (!currentConvId) {
-      const newConv: Conversation = {
-        id: Math.random().toString(36).substring(2, 11),
-        title: text.length > 25 ? text.substring(0, 25) + "..." : text,
-        messages: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        archetype: "warm",
-      };
-      updatedConversations = [newConv, ...updatedConversations];
-      setConversations(updatedConversations);
-      setActiveId(newConv.id);
-      currentConvId = newConv.id;
-    }
-
-    // Find the target conversation
-    const convIndex = updatedConversations.findIndex((c) => c.id === currentConvId);
-    if (convIndex === -1) return;
-
-    const targetConv = updatedConversations[convIndex];
-
-    const newUserMessage: Message = {
-      id: Math.random().toString(36).substring(2, 11),
-      role: "user",
-      content: text,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Update conversation state locally
-    const nextMessages = [...targetConv.messages, newUserMessage];
-    const renamedTitle =
-      targetConv.messages.length === 0
-        ? text.length > 25
-          ? text.substring(0, 25) + "..."
-          : text
-        : targetConv.title;
-
-    const updatedConv = {
-      ...targetConv,
-      title: renamedTitle,
-      messages: nextMessages,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const nextConversations = [
-      updatedConv,
-      ...updatedConversations.filter((c) => c.id !== currentConvId),
-    ];
-    setConversations(nextConversations);
-
-    // Cancel any active request to prevent duplicate/race conditions
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setIsLoading(true);
-    setError(null);
-
+  const handleDownloadZip = async () => {
     try {
-      const reply = await sendMessageToNeha(nextMessages, targetConv.archetype, settings.userNickname, controller.signal);
-
-      const newModelMessage: Message = {
-        id: Math.random().toString(36).substring(2, 11),
-        role: "model",
-        content: reply,
-        timestamp: new Date().toISOString(),
-      };
-
-      // Add model reply to state
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === currentConvId
-            ? { ...c, messages: [...c.messages, newModelMessage], updatedAt: new Date().toISOString() }
-            : c
-        )
-      );
-
-      // Boost affection dynamically
-      setNehaState((prev) => ({
-        ...prev,
-        affectionLevel: Math.min(100, prev.affectionLevel + 2),
-        activity: COFFEE_ACTIONS[Math.floor(Math.random() * COFFEE_ACTIONS.length)],
-      }));
-    } catch (err: any) {
-      if (err.name === "AbortError") {
-        console.log("Communication aborted by user request.");
-        return;
-      }
-      setError(err.message || "Failed to communicate with Neha");
-    } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
-      setIsLoading(false);
+      setIsDownloadingZip(true);
+      setZipProgress(10);
+      await downloadAndroidProjectZip((percent) => {
+        setZipProgress(percent);
+      });
+      setTimeout(() => {
+        setIsDownloadingZip(false);
+        setZipProgress(0);
+      }, 1000);
+    } catch (err) {
+      console.error('Failed to export zip', err);
+      setIsDownloadingZip(false);
     }
   };
 
-  const handleRetryMessage = async () => {
-    if (!activeId) return;
-    const active = conversations.find((c) => c.id === activeId);
-    if (!active || active.messages.length === 0) return;
-
-    // Retrieve the last user message
-    const lastUserMsg = [...active.messages].reverse().find((m) => m.role === "user");
-    if (!lastUserMsg) return;
-
-    // Remove any trailing model/error message to perform a clean retry
-    const filteredMsgs = active.messages.filter((m) => m.id !== lastUserMsg.id && m.role === "user");
-    
-    // Set active list
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeId
-          ? { ...c, messages: [...filteredMsgs] }
-          : c
-      )
-    );
-
-    // Re-send the text
-    await handleSendMessage(lastUserMsg.content);
-  };
-
-  const handleRegenerateResponse = async () => {
-    if (!activeId) return;
-    const targetId = activeId;
-    setError(null);
-
-    const active = conversations.find((c) => c.id === targetId);
-    if (!active || active.messages.length === 0) return;
-
-    // Filter out the last model message to replace it
-    const lastModelIndex = [...active.messages].reverse().findIndex((m) => m.role === "model");
-    if (lastModelIndex === -1) return;
-
-    const actualIndex = active.messages.length - 1 - lastModelIndex;
-    const historyWithoutLastReply = active.messages.slice(0, actualIndex);
-
-    setConversations((prev) =>
-      prev.map((c) => (c.id === targetId ? { ...c, messages: historyWithoutLastReply } : c))
-    );
-
-    // Cancel any active request to prevent duplicate/race conditions
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setIsLoading(true);
-
-    try {
-      const reply = await sendMessageToNeha(historyWithoutLastReply, active.archetype, settings.userNickname, controller.signal);
-
-      const newModelMessage: Message = {
-        id: Math.random().toString(36).substring(2, 11),
-        role: "model",
-        content: reply,
-        timestamp: new Date().toISOString(),
-      };
-
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === targetId
-            ? { ...c, messages: [...c.messages, newModelMessage], updatedAt: new Date().toISOString() }
-            : c
-        )
-      );
-    } catch (err: any) {
-      if (err.name === "AbortError") {
-        console.log("Regeneration aborted by user request.");
-        return;
-      }
-      setError(err.message || "Failed to regenerate reply");
-    } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
-      setIsLoading(false);
-    }
-  };
-
-  const handleStopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsLoading(false);
-  };
-
-  const handleDeleteMessage = (messageId: string) => {
-    if (!activeId) return;
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeId ? { ...c, messages: c.messages.filter((m) => m.id !== messageId) } : c
-      )
-    );
-  };
-
-  const handleCreateConversation = () => {
-    const newConv: Conversation = {
-      id: Math.random().toString(36).substring(2, 11),
-      title: "New Chat",
-      messages: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      archetype: "warm",
-    };
-    setConversations((prev) => [newConv, ...prev]);
-    setActiveId(newConv.id);
-  };
-
-  const handleDeleteConversation = (id: string) => {
-    const remaining = conversations.filter((c) => c.id !== id);
-    if (remaining.length === 0) {
-      const newConv: Conversation = {
-        id: Math.random().toString(36).substring(2, 11),
-        title: "New Chat",
-        messages: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        archetype: "warm",
-      };
-      setConversations([newConv]);
-      setActiveId(newConv.id);
-    } else {
-      setConversations(remaining);
-      if (activeId === id) {
-        setActiveId(remaining[0].id);
-      }
-    }
-  };
-
-  const handleRenameConversation = (id: string, newTitle: string) => {
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, title: newTitle, updatedAt: new Date().toISOString() } : c))
-    );
-  };
-
-  const handleSaveSettings = (newSettings: UserSettings) => {
-    setSettings(newSettings);
-  };
-
-  const handleToggleTheme = () => {
-    setSettings((prev) => ({
-      ...prev,
-      theme: prev.theme === "light" ? "dark" : "light",
-    }));
-  };
-
-  const handleSwitchArchetypeInActiveConv = (arch: Archetype) => {
-    if (!activeId) return;
-    setConversations((prev) =>
-      prev.map((c) => (c.id === activeId ? { ...c, archetype: arch } : c))
-    );
-  };
-
-  const handleTriggerSupportNote = async (context: string) => {
-    setIsGeneratingNote(true);
-    try {
-      const note = await getNehaSupportNote(context, activeArchetype);
-      setGeneratedNote(note);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsGeneratingNote(false);
-    }
+  const handleCopyXml = () => {
+    navigator.clipboard.writeText(ACTIVITY_MAIN_XML);
+    setHeaderCopied(true);
+    setTimeout(() => setHeaderCopied(false), 2000);
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-neutral-100 dark:bg-neutral-950 font-sans text-neutral-800 dark:text-neutral-100">
-      {/* Responsive Sidebar for Chat History */}
-      <Sidebar
-        conversations={conversations}
-        activeId={activeId}
-        onSelectConversation={setActiveId}
-        onCreateConversation={handleCreateConversation}
-        onDeleteConversation={handleDeleteConversation}
-        onRenameConversation={handleRenameConversation}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        theme={settings.theme}
-        onToggleTheme={handleToggleTheme}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+    <div className="min-h-screen bg-[#060911] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+      
+      {/* ========================================================= */}
+      {/* TOP BAR CONTRACT: Brand — Nav — Primary Action           */}
+      {/* ========================================================= */}
+      <header className="flex items-center justify-between gap-8 px-6 py-3.5 bg-[#090D18]/90 backdrop-blur-md border-b border-slate-800/80 sticky top-0 z-50">
+        {/* Zone 1: Brand Wordmark */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-600 to-teal-400 flex items-center justify-center text-[#060911] font-bold shadow-md shadow-cyan-500/20">
+            <Cpu className="w-5 h-5 stroke-[2.4]" />
+          </div>
+          <div>
+            <span className="text-base font-bold tracking-tight text-white whitespace-nowrap">
+              Hey Sheri
+            </span>
+            <span className="hidden sm:inline-block text-xs text-cyan-400 font-mono ml-2 px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-800/60">
+              Gemma LLM &amp; Voice Studio
+            </span>
+          </div>
+        </div>
 
-      {/* Main Container */}
-      <main className="flex-1 flex flex-row overflow-hidden relative h-full">
-        {/* Central Chat Interface */}
-        <ChatInterface
-          messages={activeConversation ? activeConversation.messages : []}
-          onSendMessage={handleSendMessage}
-          isLoading={isLoading}
-          onClearHistory={() => {
-            if (activeId) {
-              setConversations((prev) =>
-                prev.map((c) => (c.id === activeId ? { ...c, messages: [] } : c))
-              );
-            }
-          }}
-          archetype={activeArchetype}
-          settings={settings}
-          nehaState={nehaState}
-          onToggleSidebar={() => setIsSidebarOpen(true)}
-          onRegenerateResponse={handleRegenerateResponse}
-          onDeleteMessage={handleDeleteMessage}
-          onSelectPrompt={handleSendMessage}
-          error={error}
-          onRetry={handleRetryMessage}
-          onStopGeneration={handleStopGeneration}
-        />
+        {/* Zone 2: Single-line clean navigation links */}
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-400">
+          <button
+            onClick={() => setRightPanelTab('code')}
+            className={`transition-colors whitespace-nowrap hover:text-white ${
+              rightPanelTab === 'code' ? 'text-cyan-400 font-semibold' : ''
+            }`}
+          >
+            Vosk &amp; Kotlin Code
+          </button>
+          <button
+            onClick={() => setRightPanelTab('inspector')}
+            className={`transition-colors whitespace-nowrap hover:text-white ${
+              rightPanelTab === 'inspector' ? 'text-cyan-400 font-semibold' : ''
+            }`}
+          >
+            Voice Pipeline &amp; Audit
+          </button>
+          <span className="text-slate-600">·</span>
+          <span className="text-xs text-slate-400 flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            Vosk 16kHz Offline
+          </span>
+        </nav>
 
-        {/* Desktop Right Panel: Neha Profile & State Monitor */}
-        <div className="hidden xl:flex w-80 border-l border-neutral-150 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5 overflow-y-auto flex-col gap-4 shrink-0">
-          <h3 className="text-xs font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider pl-1">
-            Companion Status
-          </h3>
-          <NehaProfileCard
-            archetype={activeArchetype}
-            onChangeArchetype={handleSwitchArchetypeInActiveConv}
-            state={nehaState}
-            onTriggerNote={handleTriggerSupportNote}
-            isGeneratingNote={isGeneratingNote}
-            generatedNote={generatedNote}
-            nehaName={settings.nehaName}
-            nehaAvatar={settings.nehaAvatar}
+        {/* Zone 3: CTA Buttons */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            onClick={handleDownloadZip}
+            disabled={isDownloadingZip}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 transition-all shadow-md shadow-emerald-500/20 active:scale-95 whitespace-nowrap cursor-pointer disabled:opacity-75"
+          >
+            <Download className={`w-4 h-4 stroke-[2.2] ${isDownloadingZip ? 'animate-bounce' : ''}`} />
+            <span>
+              {isDownloadingZip 
+                ? `Packing ZIP ${zipProgress}%...` 
+                : 'Download All Files (.ZIP)'}
+            </span>
+          </button>
+
+          <button
+            onClick={handleCopyXml}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-[#00E5FF] hover:bg-[#33ebff] text-slate-950 transition-all shadow-md shadow-cyan-500/20 active:scale-95 whitespace-nowrap cursor-pointer"
+          >
+            {headerCopied ? (
+              <>
+                <Check className="w-4 h-4 stroke-[2.5]" />
+                <span>XML Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4 stroke-[2.2]" />
+                <span>Copy XML</span>
+              </>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* ========================================================= */}
+      {/* MAIN WORKSPACE: 2-Column Split View                       */}
+      {/* ========================================================= */}
+      <main className="flex-1 max-w-[1560px] w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* Left Column: Interactive Phone Simulator (5 cols on large screens) */}
+        <div className="lg:col-span-5 flex flex-col items-center">
+          
+          {/* Quick Info Header Card */}
+          <div className="w-full max-w-[360px] mb-3 flex items-center justify-between text-xs text-slate-400 px-1">
+            <div className="flex items-center gap-1.5 font-medium">
+              <Smartphone className="w-4 h-4 text-cyan-400" />
+              <span>Interactive Android Emulator</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsServiceActive(!isServiceActive)}
+                className="text-[11px] hover:text-white transition-colors"
+                title="Toggle service"
+              >
+                Service: <span className={isServiceActive ? 'text-emerald-400 font-medium' : 'text-slate-500'}>{isServiceActive ? 'On' : 'Off'}</span>
+              </button>
+              <span>·</span>
+              <button
+                onClick={() => setIsOfflineMode(!isOfflineMode)}
+                className="text-[11px] hover:text-white transition-colors"
+                title="Toggle offline mode"
+              >
+                Offline: <span className={isOfflineMode ? 'text-cyan-400 font-medium' : 'text-slate-500'}>{isOfflineMode ? 'On' : 'Off'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* The Live Interactive Phone Frame */}
+          <PhoneSimulator
+            isServiceActive={isServiceActive}
+            setIsServiceActive={setIsServiceActive}
+            isOfflineMode={isOfflineMode}
+            setIsOfflineMode={setIsOfflineMode}
+            selectedViewId={selectedViewId}
+            onSelectView={setSelectedViewId}
           />
         </div>
+
+        {/* Right Column: Code Viewer & Specifications (7 cols on large screens) */}
+        <div className="lg:col-span-7 flex flex-col gap-4 h-[780px]">
+          
+          {/* Studio Tab Switcher */}
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-1 bg-[#090D18] p-1 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setRightPanelTab('code')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  rightPanelTab === 'code'
+                    ? 'bg-[#18233C] text-cyan-300 shadow-sm border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <FileCode className="w-3.5 h-3.5" />
+                <span>Android Layout &amp; Code Studio</span>
+              </button>
+              
+              <button
+                onClick={() => setRightPanelTab('inspector')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  rightPanelTab === 'inspector'
+                    ? 'bg-[#18233C] text-cyan-300 shadow-sm border border-cyan-500/30'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Layout Inspector &amp; Specs</span>
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-400 font-mono hidden sm:block">
+              Target: <span className="text-slate-300">ConstraintLayout 2.1+</span>
+            </div>
+          </div>
+
+          {/* Right Panel Main View */}
+          <div className="flex-1 min-h-0">
+            {rightPanelTab === 'code' ? (
+              <CodeViewer 
+                selectedViewId={selectedViewId} 
+                onSelectView={setSelectedViewId} 
+              />
+            ) : (
+              <LayoutInspector
+                selectedViewId={selectedViewId}
+                onSelectView={setSelectedViewId}
+                isServiceActive={isServiceActive}
+                setIsServiceActive={setIsServiceActive}
+                isOfflineMode={isOfflineMode}
+                setIsOfflineMode={setIsOfflineMode}
+              />
+            )}
+          </div>
+        </div>
+
       </main>
 
-      {/* Profile / Preferences Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onSaveSettings={handleSaveSettings}
-        currentArchetype={activeArchetype}
-        onChangeArchetype={handleSwitchArchetypeInActiveConv}
-      />
+      {/* Footer / Status bar */}
+      <footer className="border-t border-slate-800/80 bg-[#080C15] px-6 py-3 text-xs text-slate-500 flex flex-wrap items-center justify-between gap-4 mt-auto">
+        <div className="flex items-center gap-3">
+          <span>Hey Sheri Voice Assistant</span>
+          <span>·</span>
+          <span>Kotlin ViewBinding Ready</span>
+          <span>·</span>
+          <span className="text-cyan-400">Strictly Voice Navigation (No Maps button)</span>
+        </div>
+        <div className="text-[11px] font-mono text-slate-400">
+          Target SDK 35 · Material Components · On-Device Voice Pipeline
+        </div>
+      </footer>
     </div>
   );
 }

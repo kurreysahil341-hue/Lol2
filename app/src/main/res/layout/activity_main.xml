@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Project: Hey Sheri Voice Assistant
+    Layout: res/layout/activity_main.xml
+    Theme: Modern Minimalist High-Tech Dark Mode
+-->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_dark"
+    android:fitsSystemWindows="true">
+
+    <!-- ========================================================= -->
+    <!-- 1. STATUS HEADER: Horizontal Top Layout with Indicators   -->
+    <!-- ========================================================= -->
+    <LinearLayout
+        android:id="@+id/layoutStatusHeader"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="28dp"
+        android:layout_marginEnd="20dp"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Foreground Service Status Indicator ("Hey Sheri Active") -->
+        <LinearLayout
+            android:id="@+id/layoutServiceStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_status_badge"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="9dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="9dp">
+
+            <!-- Small Green Status Dot Indicator -->
+            <View
+                android:id="@+id/dotServiceStatus"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_dot_active" />
+
+            <TextView
+                android:id="@+id/tvServiceStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="@string/status_service_active"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Offline Status Indicator ("Offline Mode Enabled") -->
+        <LinearLayout
+            android:id="@+id/layoutOfflineStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_status_badge"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="9dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="9dp">
+
+            <!-- Offline Status Shield / Bolt Icon -->
+            <ImageView
+                android:id="@+id/ivOfflineStatus"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_marginEnd="8dp"
+                android:contentDescription="@string/desc_offline_indicator"
+                android:src="@drawable/ic_offline_bolt"
+                app:tint="@color/accent_cyan" />
+
+            <TextView
+                android:id="@+id/tvOfflineStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="@string/status_offline_mode"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ========================================================= -->
+    <!-- 2. MAIN CENTER VIEW: Large Mic & Visualizer Wave Area     -->
+    <!-- ========================================================= -->
+    <FrameLayout
+        android:id="@+id/layoutMicContainer"
+        android:layout_width="260dp"
+        android:layout_height="260dp"
+        app:layout_constraintBottom_toTopOf="@id/tvListeningPrompt"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutStatusHeader"
+        app:layout_constraintVertical_bias="0.46"
+        app:layout_constraintVertical_chainStyle="packed">
+
+        <!-- Outer Ambient Visualizer Wave Ring (Expands & pulses) -->
+        <View
+            android:id="@+id/viewWaveOuter"
+            android:layout_width="250dp"
+            android:layout_height="250dp"
+            android:layout_gravity="center"
+            android:alpha="0.25"
+            android:background="@drawable/bg_wave_ring_outer" />
+
+        <!-- Inner Ambient Visualizer Wave Ring -->
+        <View
+            android:id="@+id/viewWaveInner"
+            android:layout_width="190dp"
+            android:layout_height="190dp"
+            android:layout_gravity="center"
+            android:alpha="0.55"
+            android:background="@drawable/bg_wave_ring_inner" />
+
+        <!-- Voice Visualizer Wave Animation Placeholder / Waveform Canvas -->
+        <View
+            android:id="@+id/visualizerWavePlaceholder"
+            android:layout_width="140dp"
+            android:layout_height="140dp"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_visualizer_wave" />
+
+        <!-- Prominent Large Circular Mic Button -->
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnMic"
+            android:layout_width="92dp"
+            android:layout_height="92dp"
+            android:layout_gravity="center"
+            android:contentDescription="@string/desc_voice_assistant_mic"
+            app:backgroundTint="@color/accent_cyan"
+            app:elevation="10dp"
+            app:fabCustomSize="92dp"
+            app:maxImageSize="40dp"
+            app:rippleColor="@color/accent_cyan_glow"
+            app:srcCompat="@drawable/ic_mic"
+            app:tint="@color/bg_dark" />
+    </FrameLayout>
+
+    <!-- Listening Prompt Text Below the Mic -->
+    <TextView
+        android:id="@+id/tvListeningPrompt"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="32dp"
+        android:gravity="center"
+        android:letterSpacing="0.02"
+        android:text="@string/prompt_listening"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp"
+        android:fontFamily="sans-serif-medium"
+        app:layout_constraintBottom_toTopOf="@id/tvVoiceHint"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutMicContainer" />
+
+    <!-- Secondary Command Hint -->
+    <TextView
+        android:id="@+id/tvVoiceHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center"
+        android:text="@string/hint_voice_commands"
+        android:textColor="@color/text_muted"
+        android:textSize="13sp"
+        android:fontFamily="sans-serif"
+        app:layout_constraintBottom_toTopOf="@id/layoutBottomNav"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tvListeningPrompt" />
+
+    <!-- ========================================================= -->
+    <!-- 3. NAVIGATION / ACTION BUTTONS: Home & Settings           -->
+    <!-- (Strictly Home & Settings - No Maps button)               -->
+    <!-- ========================================================= -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/layoutBottomNav"
+        android:layout_width="0dp"
+        android:layout_height="64dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="28dp"
+        android:background="@drawable/bg_bottom_nav_bar"
+        android:paddingStart="40dp"
+        android:paddingEnd="40dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Home Action Button -->
+        <ImageButton
+            android:id="@+id/btnNavHome"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/desc_nav_home"
+            android:src="@drawable/ic_nav_home"
+            app:tint="@color/accent_cyan"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Settings Action Button -->
+        <ImageButton
+            android:id="@+id/btnNavSettings"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/desc_nav_settings"
+            android:src="@drawable/ic_nav_settings"
+            app:tint="@color/text_secondary"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

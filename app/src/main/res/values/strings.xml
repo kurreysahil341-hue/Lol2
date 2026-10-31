@@ -1,3 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Teacher Resume</string>
+    <string name="app_name">Hey Sheri</string>
+    <string name="status_service_active">Hey Sheri Active</string>
+    <string name="status_service_paused">Hey Sheri Paused</string>
+    <string name="status_offline_mode">Offline Mode Enabled</string>
+    <string name="status_cloud_online">Cloud Hybrid Active</string>
+    <string name="desc_offline_indicator">Offline Mode Indicator</string>
+    <string name="desc_voice_assistant_mic">Activate Voice Assistant</string>
+    <string name="prompt_listening">Listening for "Hey Sheri"…</string>
+    <string name="prompt_tap_to_speak">Tap mic or say "Hey Sheri"</string>
+    <string name="hint_voice_commands">Gemma LLM &amp; voice calls enabled · Speak freely</string>
+    <string name="desc_nav_home">Home</string>
+    <string name="desc_nav_settings">Assistant Settings</string>
 </resources>

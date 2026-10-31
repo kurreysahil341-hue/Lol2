@@ -1,6 +1,6 @@
 {
-  "name": "AI Girlfriend Neha",
-  "description": "An interactive, supportive, and emotionally intelligent virtual companion named Neha.",
+  "name": "Hey Sheri - Android Voice Assistant Layout & Studio",
+  "description": "Minimalist, high-tech Android layout XML and Kotlin ViewBinding suite for Hey Sheri voice assistant with live preview and interactive simulator.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
