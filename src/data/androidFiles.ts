@@ -2275,36 +2275,124 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository Code
+    - name: Checkout Repository
       uses: actions/checkout@v4
 
     - name: Set up Java JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
+        java-version: "17"
+        distribution: "temurin"
 
-    - name: Auto Accept Android SDK Licenses
-      run: |
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+    - name: Setup Gradle Environment
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: "8.7"
+        cache-read-only: false
 
-    - name: Ensure Gradle Wrapper Executable
+    - name: Verify & Auto-Repair Android Project Structure
       run: |
-        if [ ! -f "gradlew" ]; then
-          gradle wrapper --gradle-version 8.7
+        echo "=== Current Root Directory Contents ==="
+        ls -la
+
+        # 1. If files were placed inside a subfolder, move them to root
+        if [ ! -d "app" ]; then
+          FOUND_APP=$(find . -maxdepth 3 -type d -name "app" | head -n 1)
+          if [ -n "$FOUND_APP" ]; then
+            SUBDIR=$(dirname "$FOUND_APP")
+            echo "Found app folder inside subfolder: $SUBDIR"
+            echo "Moving files from $SUBDIR to repository root..."
+            cp -r "$SUBDIR"/* .
+          fi
         fi
-        chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --no-daemon --stacktrace
+        # 2. Ensure settings.gradle.kts exists
+        if [ ! -f "settings.gradle.kts" ] && [ ! -f "settings.gradle" ]; then
+          echo "settings.gradle.kts missing! Creating it..."
+          cat << 'EOF' > settings.gradle.kts
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://alphacephei.com/maven/") }
+    }
+}
+rootProject.name = "HeySheri"
+include(":app")
+EOF
+        fi
 
-    - name: Upload Hey Sheri APK to Artifacts
-      if: success()
+        # 3. Ensure root build.gradle.kts exists
+        if [ ! -f "build.gradle.kts" ] && [ ! -f "build.gradle" ]; then
+          echo "Root build.gradle.kts missing! Creating it..."
+          cat << 'EOF' > build.gradle.kts
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.4.1")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24")
+    }
+}
+plugins {
+    id("com.android.application") version "8.4.1" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+}
+tasks.register("clean", Delete::class) {
+    delete(rootProject.layout.buildDirectory)
+}
+EOF
+        fi
+
+        # 4. Ensure gradle.properties exists
+        if [ ! -f "gradle.properties" ]; then
+          echo "gradle.properties missing! Creating it..."
+          cat << 'EOF' > gradle.properties
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+android.enableJetifier=true
+android.nonTransitiveRClass=true
+EOF
+        fi
+
+        # 5. Generate pristine Gradle Wrapper directly using runner's installed Gradle 8.7
+        echo "Generating official Gradle Wrapper using system Gradle..."
+        gradle wrapper --gradle-version 8.7 --distribution-type bin
+        chmod +x ./gradlew || true
+
+        echo "=== Root Directory After Repair ==="
+        ls -la
+        ls -la gradle/wrapper/ || true
+
+    - name: Build Android Debug APK
+      run: |
+        echo "Starting Android Build..."
+        if [ -x "./gradlew" ] && [ -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+          echo "Building with ./gradlew..."
+          ./gradlew clean assembleDebug --no-daemon --stacktrace || gradle clean assembleDebug --no-daemon --stacktrace
+        else
+          echo "Building with gradle command directly..."
+          gradle clean assembleDebug --no-daemon --stacktrace
+        fi
+
+    - name: Upload Hey Sheri Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: HeySheri-Debug-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: |
+          app/build/outputs/apk/debug/*.apk
+          **/build/outputs/apk/**/*.apk
+        if-no-files-found: error
         retention-days: 14
 `;
 
