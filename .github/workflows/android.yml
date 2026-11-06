@@ -1,6 +1,5 @@
 name: Build Hey Sheri APK
-
-on:
+On:
   push:
     branches: [ "main", "master" ]
   pull_request:
